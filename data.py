@@ -38,7 +38,12 @@ def get_all_samples(root_path, has_target=True):
 
     return samples
 
-def get_train_and_validation_datasets(root_path):
+def get_test_samples(root_path):
+    data_path = osp.join(root_path, osp.join('data', 'test'))
+    samples = get_all_samples(data_path, has_target=False)
+    return samples
+
+def get_train_and_validation_samples(root_path):
     data_path = osp.join(root_path, osp.join('data','train'))
     samples = get_all_samples(data_path, has_target=True)
 
@@ -65,6 +70,13 @@ def get_train_and_validation_datasets(root_path):
 
 from augmentation import *
 
+def test_augment(image):
+    DY0, DY1, DX0, DX1 = compute_center_pad(101, 101, factor=32)
+    Y0, Y1, X0, X1 = DY0, DY0 + 101, DX0, DX0 + 101
+
+    image = do_pad(image, DY0, DY1, DX0, DX1)
+    return image
+
 def validation_augment(image,mask):
 
     DY0, DY1, DX0, DX1 = compute_center_pad(101, 101, factor=32)
@@ -80,9 +92,8 @@ def train_augment(image,mask):
 
     if np.random.rand() < 0.5:
          image, mask = do_horizontal_flip2(image, mask)
-         pass
     #
-    if np.random.rand() < 0.5:
+    if np.random.rand() < 0.2:
         c = np.random.choice(2)
         if c==0:
             image, mask = do_random_shift_scale_crop_pad2(image, mask, 0.2)
@@ -133,8 +144,31 @@ class TGSSaltDataset(Dataset):
         return image, mask
 
     def __len__(self):
-        if self.phase == 'train':
-            return len(self.keys) * 10
+        # if self.phase == 'train':
+        #     return len(self.keys) * 10
+        return len(self.keys)
+
+class TGSSaltDatasetTest(Dataset):
+    def __init__(self, samples):
+        self.samples = samples
+        self.keys = list(self.samples.keys())
+
+        self.to_tensor = transforms.ToTensor()
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    def __getitem__(self, idx):
+        sample = self.samples[self.keys[idx]]
+
+        image = read_image(sample.image_fp)
+        image = np.array(image, dtype=np.float32)/255.0
+        image = test_augment(image)
+
+        image = self.to_tensor(image)
+        image = self.normalize(image)
+
+        return image
+
+    def __len__(self):
         return len(self.keys)
 
 if __name__ == '__main__':

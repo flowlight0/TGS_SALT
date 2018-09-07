@@ -33,14 +33,17 @@ def compute_center_pad(H,W, factor=32):
 def do_center_pad_to_factor(image, factor=32):
     H,W = image.shape[:2]
     dy0, dy1, dx0, dx1 = compute_center_pad(H,W, factor)
-
     image = cv2.copyMakeBorder(image, dy0, dy1, dx0, dx1, cv2.BORDER_REFLECT_101)
                                #cv2.BORDER_CONSTANT, 0)
     return image
 
-def do_pad2(image, mask, dy0, dy1, dx0, dx1):
+def do_pad(image, dy0, dy1, dx0, dx1):
     image = cv2.copyMakeBorder(image, dy0, dy1, dx0, dx1, cv2.BORDER_REFLECT_101)
-    mask = cv2.copyMakeBorder(mask, dy0, dy1, dx0, dx1, cv2.BORDER_REFLECT_101)
+    return image
+
+def do_pad2(image, mask, dy0, dy1, dx0, dx1):
+    image = do_pad(image, dy0, dy1, dx0, dx1)
+    mask = do_pad(mask, dy0, dy1, dx0, dx1)
 
     return image, mask
 
