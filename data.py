@@ -43,6 +43,35 @@ def get_test_samples(root_path):
     samples = get_all_samples(data_path, has_target=False)
     return samples
 
+def read_from_list(file, data_path):
+    ids = []
+    with open(file, 'r') as phase_input:
+        lines = phase_input.readlines()
+        for line in lines:
+            splt = line.split('/')[1]
+            ids.append(splt)
+    train_data = osp.join(data_path, 'train')
+    image_folder = osp.join(train_data, 'images')
+    mask_folder = osp.join(train_data, 'masks')
+
+    samples = {}
+    for id in ids:
+        id = id[:-1]
+        samples[id] = Sample()
+        samples[id].image_fp = osp.join(image_folder, id + '.png')
+        samples[id].mask_fp = osp.join(mask_folder, id + '.png')
+    return samples
+
+def get_train_and_validation_samples_from_list(root_path, train_file, validation_file):
+    data_path = osp.join(root_path, 'data')
+    train_file = osp.join(data_path, osp.join('split', train_file))
+    validation_file = osp.join(data_path, osp.join('split', validation_file))
+
+    train_samples = read_from_list(train_file, data_path)
+    validation_samples = read_from_list(validation_file, data_path)
+    return train_samples, validation_samples
+
+
 def get_train_and_validation_samples(root_path):
     data_path = osp.join(root_path, osp.join('data','train'))
     samples = get_all_samples(data_path, has_target=True)
@@ -170,8 +199,3 @@ class TGSSaltDatasetTest(Dataset):
 
     def __len__(self):
         return len(self.keys)
-
-if __name__ == '__main__':
-    data_path = os.sep.join(os.getcwd().split(os.sep)[:-1])
-    training_samples, validation_samples = get_train_and_validation_datasets(data_path)
-    dataset = TGSSaltDataset(training_samples,phase='train')

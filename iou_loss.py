@@ -14,6 +14,56 @@ try:
 except ImportError: # py3k
     from itertools import  filterfalse
 
+import torch.nn as nn
+
+class FocalLoss2d(nn.Module):
+
+    def __init__(self, gamma=2, size_average=True):
+        super(FocalLoss2d, self).__init__()
+        self.gamma = gamma
+        self.size_average = size_average
+
+
+    def forward(self, logit, target, class_weight=None, type='sigmoid'):
+        target = target.contiguous().view(-1, 1).long()
+
+
+        if type=='sigmoid':
+            if class_weight is None:
+                class_weight = [1]*2 #[0.5, 0.5]
+
+            # prob = logit
+            prob   = F.sigmoid(logit)
+            prob   = prob.contiguous().view(-1, 1)
+            prob   = torch.cat((1-prob, prob), 1)
+            select = torch.FloatTensor(len(prob), 2).zero_().cuda()
+            select.scatter_(1, target, 1.)
+
+        elif  type=='softmax':
+            B,C,H,W = logit.size()
+            if class_weight is None:
+                class_weight =[1]*C #[1/C]*C
+
+            logit   = logit.permute(0, 2, 3, 1).contiguous().view(-1, C)
+            prob    = F.softmax(logit,1)
+            select  = torch.FloatTensor(len(prob), C).zero_().cuda()
+            select.scatter_(1, target, 1.)
+
+        class_weight = torch.FloatTensor(class_weight).cuda().view(-1,1)
+        class_weight = torch.gather(class_weight, 0, target)
+
+        prob       = (prob*select).sum(1).view(-1,1)
+        prob       = torch.clamp(prob,1e-8,1-1e-8)
+        batch_loss = - class_weight *(torch.pow((1-prob), self.gamma))*prob.log()
+
+        if self.size_average:
+            loss = batch_loss.mean()
+        else:
+            loss = batch_loss
+
+        return loss
+
+
 
 def lovasz_grad(gt_sorted):
     """
@@ -107,7 +157,7 @@ def lovasz_hinge_flat(logits, labels):
     perm = perm.data
     gt_sorted = labels[perm]
     grad = lovasz_grad(gt_sorted)
-    loss = torch.dot(F.elu(errors_sorted)+1, Variable(grad))
+    loss = torch.dot(F.relu(errors_sorted), Variable(grad))
     return loss
 
 
@@ -116,8 +166,8 @@ def flatten_binary_scores(scores, labels, ignore=None):
     Flattens predictions in the batch (binary case)
     Remove labels equal to 'ignore'
     """
-    scores = scores.view(-1)
-    labels = labels.view(-1)
+    scores = scores.contiguous().view(-1)
+    labels = labels.contiguous().view(-1)
     if ignore is None:
         return scores, labels
     valid = (labels != ignore)

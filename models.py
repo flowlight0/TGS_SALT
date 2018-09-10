@@ -57,10 +57,16 @@ class UNetResNet34(nn.Module):
 
         self.decoder5 = Decoder(512 + 256, 512, 256)
         self.decoder4 = Decoder(256 + 256, 512, 256)
-        self.decoder3 = Decoder(128 + 256, 256, 64)
-        self.decoder2 = Decoder(64 + 64, 128, 32)
+        self.decoder3 = Decoder(128 + 256, 256, 128)
+        self.decoder2 = Decoder(64 + 128, 128, 64)
 
         self.logit = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
             nn.Conv2d(32, 32, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 1, kernel_size=1, padding=0),
@@ -85,4 +91,5 @@ class UNetResNet34(nn.Module):
         f = self.decoder2(torch.cat([f, e2], 1))  # ; print('d2',f.size())
 
         logit = self.logit(f).view(-1,128,128)
+        # logit = F.sigmoid(logit)
         return logit

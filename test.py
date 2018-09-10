@@ -14,6 +14,7 @@ from iou_loss import lovasz_hinge
 from models import UNetResNet34
 from data import TGSSaltDataset, TGSSaltDatasetTest
 from data import get_train_and_validation_samples, get_test_samples
+from data import get_train_and_validation_samples_from_list
 from utils import save_checkpoint
 
 from tensorboardX import SummaryWriter
@@ -31,6 +32,12 @@ def eval_competition_score():
     for image, mask in validation_dl:
         image = image.cuda()
         y_pred = net(image).cpu().detach().numpy()
+
+        image_f = image.flip(3)
+        y_pred_f = net(image_f).flip(2).cpu().detach().numpy()
+
+        y_pred = (y_pred + y_pred_f) * 0.5
+
         val_predictions.append(y_pred)
         val_masks.append(mask.detach().numpy())
 
@@ -73,6 +80,9 @@ def test_submit(threshold):
     for image in test_dl:
         image = image.cuda()
         y_pred = net(image).cpu().detach().numpy()
+        image_f = image.flip(3)
+        y_pred_f = net(image_f).flip(2).cpu().detach().numpy()
+        y_pred = (y_pred + y_pred_f) * 0.5
         all_predictions.append(y_pred)
     all_predictions_stacked = np.vstack(all_predictions)
     all_predictions_stacked = all_predictions_stacked[:, Y0:Y1, X0:X1]
@@ -99,8 +109,21 @@ def test_submit(threshold):
 
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='train parameters')
+    parser.add_argument('--use_list', type=int, default=-1)
+    parser.add_argument('--load_weights', type=str, default='')
+    args = parser.parse_args()
+
     data_path = os.sep.join(os.getcwd().split(os.sep)[:-1])
-    training_samples, validation_samples = get_train_and_validation_samples(data_path)
+    if args.use_list == -1:
+        training_samples, validation_samples = get_train_and_validation_samples(data_path)
+    else:
+        train_list_name = 'list_train' + str(args.use_list) + '_3600'
+        validation_list_name = 'list_valid' + str(args.use_list) + '_400'
+        training_samples, validation_samples = get_train_and_validation_samples_from_list(data_path, train_list_name,
+                                                                                          validation_list_name)
     test_samples = get_test_samples(data_path)
 
     validation_ds = TGSSaltDataset(validation_samples)
@@ -109,7 +132,7 @@ if __name__ == '__main__':
     test_ds = TGSSaltDatasetTest(test_samples)
     test_dl = DataLoader(test_ds, batch_size=16)
 
-    model_path = osp.join(data_path, 'model_best.pth.tar')
+    model_path = osp.join(data_path, args.load_weights)
 
     checkpoint = torch.load(model_path)
 
@@ -120,4 +143,4 @@ if __name__ == '__main__':
     print ('Score: ', score)
     test_submit(threshold)
 
-    
+

@@ -1,4 +1,5 @@
 import os
+import os.path as osp
 import random
 import numpy as np
 
@@ -9,10 +10,11 @@ from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
 import torch.nn.functional as F
 
-from iou_loss import lovasz_hinge
+from iou_loss import lovasz_hinge, FocalLoss2d
 from models import UNetResNet34
 from data import TGSSaltDataset, TGSSaltDatasetTest
 from data import get_train_and_validation_samples, get_test_samples
+from data import get_train_and_validation_samples_from_list
 from utils import save_checkpoint
 
 from tensorboardX import SummaryWriter
@@ -64,35 +66,48 @@ def eval_competition_score():
 
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='train parameters')
+    parser.add_argument('--use_list',  type=int, default=-1)
+    parser.add_argument('--load_weights', type=str, default='')
+    args = parser.parse_args()
+
     DY0, DY1, DX0, DX1 = compute_center_pad(101, 101, factor=32)
     Y0, Y1, X0, X1 = DY0, DY0 + 101, DX0, DX0 + 101
+    data_path = os.sep.join(os.getcwd().split(os.sep)[:-1])
 
-    criterion = torch.nn.BCEWithLogitsLoss().cuda()
+
+    criterion = FocalLoss2d()
     net = UNetResNet34().cuda()
+    if args.load_weights:
+        model_path = osp.join(data_path, args.load_weights)
+        checkpoint = torch.load(model_path)
+        net.load_state_dict(checkpoint['state_dict'])
     net.train()
 
-    optimizer = optim.Adam(net.parameters(), lr=0.001)
+    optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    data_path = os.sep.join(os.getcwd().split(os.sep)[:-1])
-    training_samples, validation_samples = get_train_and_validation_samples(data_path)
 
-    # test_samples = get_test_samples(data_path)
-
+    if args.use_list == -1:
+        training_samples, validation_samples = get_train_and_validation_samples(data_path)
+    else:
+        train_list_name = 'list_train'+str(args.use_list)+'_3600'
+        validation_list_name = 'list_valid'+str(args.use_list)+'_400'
+        training_samples, validation_samples = get_train_and_validation_samples_from_list(data_path, train_list_name, validation_list_name)
 
     train_ds = TGSSaltDataset(training_samples,phase='train')
     validation_ds = TGSSaltDataset(validation_samples,phase='validation')
-    # test_ds = TGSSaltDatasetTest(test_samples)
 
     train_dl = DataLoader(train_ds,batch_size=16,shuffle=True)
     validation_dl = DataLoader(validation_ds,batch_size=8,shuffle=False)
-    # test_dl = DataLoader(test_ds, batch_size=16)
 
     train_writer = SummaryWriter('logs/train')
     validation_writer = SummaryWriter('logs/val')
 
     step = 0
     best_competition_score = 0
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=25, gamma=0.1)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=55, gamma=0.1)
     for epoch in range(60):  # loop over the dataset multiple times
         scheduler.step()
         print ('Epoch: ', epoch)
