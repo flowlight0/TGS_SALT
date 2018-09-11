@@ -91,5 +91,5 @@ class UNetResNet34(nn.Module):
         f = self.decoder2(torch.cat([f, e2], 1))  # ; print('d2',f.size())
 
         logit = self.logit(f).view(-1,128,128)
-        # logit = F.sigmoid(logit)
+        logit = F.sigmoid(logit)
         return logit
