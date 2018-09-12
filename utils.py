@@ -16,6 +16,11 @@ def get_file_id(filepath):
 
     return id
 
+def read_bad_samples():
+    with open('badsamples.txt', 'r') as file:
+        samples = file.readlines()
+        samples = [sample[:-1] for sample in samples]
+    return samples
 
 def net_compatible_image_size(img):
     height, width, _ = img.shape
@@ -50,8 +55,8 @@ def read_mask(file):
     return mask
 
 
-def save_checkpoint(state, data_path, is_best, filename='checkpoint.pth.tar'):
-    filepath = osp.join(data_path, filename)
+def save_checkpoint(state, data_path, is_best, suffix=''):
+    filepath = osp.join(data_path, 'checkpoint'+suffix+'.pth.tar')
     torch.save(state, filepath)
     if is_best:
-        shutil.copyfile(filepath, osp.join(data_path, 'model_best.pth.tar'))
+        shutil.copyfile(filepath, osp.join(data_path, 'model_best'+suffix+'.pth.tar'))

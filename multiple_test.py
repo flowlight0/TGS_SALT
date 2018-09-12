@@ -15,13 +15,25 @@ from models import UNetResNet34
 from data import TGSSaltDataset, TGSSaltDatasetTest
 from data import get_train_and_validation_samples, get_test_samples
 from data import get_train_and_validation_samples_from_list
-from utils import save_checkpoint
+from utils import save_checkpoint, read_bad_samples
 
 from tensorboardX import SummaryWriter
 
 from augmentation import compute_center_pad
 
 import pandas as pd
+
+def iou_numpy(outputs: np.array, labels: np.array):
+    SMOOTH = 1e-6
+
+    intersection = (outputs & labels).sum((1, 2))
+    union = (outputs | labels).sum((1, 2))
+
+    iou = (intersection + SMOOTH) / (union + SMOOTH)
+
+    thresholded = np.ceil(np.clip(20 * (iou - 0.5), 0, 10)) / 10
+
+    return thresholded  # Or thresholded.mean()
 
 def eval_competition_score():
     DY0, DY1, DX0, DX1 = compute_center_pad(101, 101, factor=32)
@@ -56,23 +68,13 @@ def eval_competition_score():
 
     assert val_masks_stacked.shape == val_predictions_stacked.shape
 
-    from sklearn.metrics import jaccard_similarity_score
+    val_masks_stacked = (val_masks_stacked > 0.5).astype(int)
 
     metric_by_threshold = []
-    for threshold in np.linspace(0, 1, 101):
+    for threshold in np.linspace(0.4, 0.5, 11):
         val_binary_prediction = (val_predictions_stacked > threshold).astype(int)
-
-        iou_values = []
-        for y_mask, p_mask in zip(val_masks_stacked, val_binary_prediction):
-            iou = jaccard_similarity_score(y_mask.flatten(), p_mask.flatten())
-            iou_values.append(iou)
-        iou_values = np.array(iou_values)
-
-        accuracies = [
-            np.mean(iou_values > iou_threshold)
-            for iou_threshold in np.linspace(0.5, 0.95, 10)
-        ]
-        print('Threshold: %.1f, Metric: %.3f' % (threshold, np.mean(accuracies)))
+        accuracies = iou_numpy(val_binary_prediction, val_masks_stacked)
+        print('Threshold: %.2f, Metric: %.5f' % (threshold, np.mean(accuracies)))
         metric_by_threshold.append((np.mean(accuracies), threshold))
 
     best_metric, best_threshold = max(metric_by_threshold)
@@ -123,7 +125,12 @@ def test_submit(threshold):
 
 
 if __name__ == '__main__':
-    use_list = [9, 2, 5, 7]
+    # use_list = [0, 1, 4, 8] -> 822
+    # use_list = [4, 8] -> 819
+    # use_list = [0, 1, 2, 4, 8] -> 823
+    # use_list = [3, 5, 6, 7, 9] -> 825
+    use_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    bad_samples = read_bad_samples()
 
     models = []
 
@@ -138,6 +145,8 @@ if __name__ == '__main__':
                                                                                           validation_list_name)
         for key in samples.keys():
             validation_samples[key] = samples[key]
+
+    list(map(validation_samples.__delitem__, filter(validation_samples.__contains__, bad_samples)))
 
     test_samples = get_test_samples(data_path)
 
